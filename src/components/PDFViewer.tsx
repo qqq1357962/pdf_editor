@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PDFPageProxy } from '../types/pdf';
+import type { PDFDocumentProxy, PDFPageProxy } from '../types/pdf';
 
 interface PDFViewerComponentProps {
-  document: ReturnType<typeof import('../hooks/usePDF').usePDF>['document'];
+  pdfDocument: PDFDocumentProxy | null;
   currentPage: number;
   scale: number;
 }
 
-export function PDFViewer({ document, currentPage, scale }: PDFViewerComponentProps) {
+export function PDFViewer({ pdfDocument, currentPage, scale }: PDFViewerComponentProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [rendering, setRendering] = useState(false);
 
   useEffect(() => {
-    if (!document) return;
+    if (!pdfDocument) return;
 
     const abortController = new AbortController();
     let pageCleanup: (() => void) | null = null;
@@ -20,7 +20,7 @@ export function PDFViewer({ document, currentPage, scale }: PDFViewerComponentPr
     const renderPage = async () => {
       setRendering(true);
       try {
-        const page = await document.getPage(currentPage) as PDFPageProxy;
+        const page = await pdfDocument.getPage(currentPage) as PDFPageProxy;
 
         // Check if aborted after async operation
         if (abortController.signal.aborted) {
@@ -66,9 +66,9 @@ export function PDFViewer({ document, currentPage, scale }: PDFViewerComponentPr
         pageCleanup();
       }
     };
-  }, [document, currentPage, scale]);
+  }, [pdfDocument, currentPage, scale]);
 
-  if (!document) {
+  if (!pdfDocument) {
     return (
       <div className="flex-1 flex items-center justify-center bg-gray-200">
         <p className="text-gray-500">No PDF loaded. Open a file to begin.</p>

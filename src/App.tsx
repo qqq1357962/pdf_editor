@@ -5,7 +5,7 @@ import './App.css';
 
 function App() {
   const {
-    document,
+    document: pdfDocument,
     currentPage,
     totalPages,
     scale,
@@ -50,7 +50,7 @@ function App() {
       )}
 
       <PDFViewer
-        document={document}
+        pdfDocument={pdfDocument}
         currentPage={currentPage}
         scale={scale}
       />
