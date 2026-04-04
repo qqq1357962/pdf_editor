@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import type { PDFPageProxy, PDFViewerProps } from '../types/pdf';
+import type { PDFPageProxy } from '../types/pdf';
 
-interface PDFViewerComponentProps extends PDFViewerProps {
+interface PDFViewerComponentProps {
   document: ReturnType<typeof import('../hooks/usePDF').usePDF>['document'];
   currentPage: number;
   scale: number;
@@ -12,32 +12,60 @@ export function PDFViewer({ document, currentPage, scale }: PDFViewerComponentPr
   const [rendering, setRendering] = useState(false);
 
   useEffect(() => {
-    if (!document || !canvasRef.current) return;
+    if (!document) return;
+
+    const abortController = new AbortController();
+    let pageCleanup: (() => void) | null = null;
 
     const renderPage = async () => {
       setRendering(true);
       try {
         const page = await document.getPage(currentPage) as PDFPageProxy;
-        const canvas = canvasRef.current!;
-        const context = canvas.getContext('2d')!;
+
+        // Check if aborted after async operation
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+
+        const context = canvas.getContext('2d');
+        if (!context) return;
 
         const viewport = page.getViewport({ scale });
 
         canvas.height = viewport.height;
         canvas.width = viewport.width;
 
-        await page.render({
+        const renderTask = page.render({
           canvasContext: context,
           viewport,
-        }).promise;
+        });
+
+        // Store cleanup function for the render task
+        pageCleanup = () => renderTask.cancel();
+
+        await renderTask.promise;
       } catch (err) {
+        // Ignore errors from aborted renders
+        if (abortController.signal.aborted) return;
         console.error('Error rendering page:', err);
       } finally {
-        setRendering(false);
+        if (!abortController.signal.aborted) {
+          setRendering(false);
+        }
       }
     };
 
     renderPage();
+
+    return () => {
+      abortController.abort();
+      if (pageCleanup) {
+        pageCleanup();
+      }
+    };
   }, [document, currentPage, scale]);
 
   if (!document) {
