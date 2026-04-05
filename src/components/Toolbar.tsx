@@ -1,34 +1,36 @@
 import { useRef } from 'react';
 
 interface ToolbarProps {
-  currentPage: number;
-  totalPages: number;
-  scale: number;
+  fileName: string;
+  hasUnappliedChanges: boolean;
   loading: boolean;
-  onLoadFile: (file: File) => void;
-  onPrevPage: () => void;
-  onNextPage: () => void;
-  onZoomIn: () => void;
-  onZoomOut: () => void;
+  onOpenFile: (file: File) => void;
+  onApply: () => void;
+  onExport: () => void;
+  onUndo: () => void;
+  onRedo: () => void;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 export function Toolbar({
-  currentPage,
-  totalPages,
-  scale,
+  fileName,
+  hasUnappliedChanges,
   loading,
-  onLoadFile,
-  onPrevPage,
-  onNextPage,
-  onZoomIn,
-  onZoomOut,
+  onOpenFile,
+  onApply,
+  onExport,
+  onUndo,
+  onRedo,
+  canUndo,
+  canRedo,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && file.type === 'application/pdf') {
-      onLoadFile(file);
+      onOpenFile(file);
     }
   };
 
@@ -36,7 +38,7 @@ export function Toolbar({
     fileInputRef.current?.click();
   };
 
-  const zoomPercent = Math.round(scale * 100);
+  const displayName = hasUnappliedChanges ? `*${fileName}` : fileName;
 
   return (
     <div className="h-14 bg-gray-800 text-white flex items-center px-4 gap-4 shadow-md">
@@ -56,51 +58,59 @@ export function Toolbar({
         className="hidden"
       />
 
-      {/* Divider */}
-      {totalPages > 0 && (
+      {/* File name with change indicator */}
+      {fileName && (
         <>
           <div className="w-px h-8 bg-gray-600" />
-
-          {/* Page Navigation */}
-          <div className="flex items-center gap-2">
+          <span className={`font-medium ${hasUnappliedChanges ? 'text-yellow-400' : ''}`}>
+            {displayName}
+          </span>
+          {hasUnappliedChanges && (
             <button
-              onClick={onPrevPage}
-              disabled={currentPage <= 1}
-              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
+              onClick={onApply}
+              className="px-3 py-1 bg-green-600 hover:bg-green-700 rounded text-sm"
             >
-              ←
+              Apply
             </button>
-            <span className="min-w-[80px] text-center">
-              {currentPage} / {totalPages}
-            </span>
-            <button
-              onClick={onNextPage}
-              disabled={currentPage >= totalPages}
-              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              →
-            </button>
-          </div>
+          )}
+        </>
+      )}
 
-          {/* Divider */}
+      {/* Undo/Redo */}
+      {fileName && (
+        <>
           <div className="w-px h-8 bg-gray-600" />
-
-          {/* Zoom Controls */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
-              onClick={onZoomOut}
-              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
+              onClick={onUndo}
+              disabled={!canUndo}
+              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Undo (Ctrl+Z)"
             >
-              −
+              ↶
             </button>
-            <span className="min-w-[60px] text-center">{zoomPercent}%</span>
             <button
-              onClick={onZoomIn}
-              className="px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded"
+              onClick={onRedo}
+              disabled={!canRedo}
+              className="px-2 py-1 bg-gray-700 hover:bg-gray-600 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Redo (Ctrl+Y)"
             >
-              +
+              ↷
             </button>
           </div>
+        </>
+      )}
+
+      {/* Export button */}
+      {fileName && (
+        <>
+          <div className="w-px h-8 bg-gray-600" />
+          <button
+            onClick={onExport}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded"
+          >
+            Export
+          </button>
         </>
       )}
 
