@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import type { CropBox } from '../types/pdf';
 import { config } from '../config/pdf-editor.config';
 import { detectAutoCrop } from '../utils/auto-crop';
@@ -21,13 +21,15 @@ export function CropOverlay({
   sourceCanvas,
 }: CropOverlayProps) {
   const overlayRef = useRef<HTMLCanvasElement>(null);
-  const [cropBox, setCropBox] = useState<CropBox>(
-    initialCropBox || { x1: 5, y1: 5, x2: 95, y2: 95 }
-  );
-  const [dragging, setDragging] = useState<'tl' | 'tr' | 'bl' | 'br' | 'move' | null>(null);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  // Convert cropBox to canvas coordinates (left-bottom origin to canvas top-left)
+  // Use refs for drag state to avoid re-renders
+  const cropBoxRef = useRef<CropBox>(initialCropBox || { x1: 5, y1: 5, x2: 95, y2: 95 });
+  const draggingRef = useRef<'tl' | 'tr' | 'bl' | 'br' | 'move' | null>(null);
+  const dragStartRef = useRef({ x: 0, y: 0 });
+  const rafRef = useRef<number>(0);
+
+  // Convert cropBox to canvas coordinates
   const toCanvasCoords = useCallback((cb: CropBox) => {
     return {
       left: (cb.x1 / 100) * canvasWidth,
@@ -37,17 +39,19 @@ export function CropOverlay({
     };
   }, [canvasWidth, canvasHeight]);
 
-  // Draw overlay
-  useEffect(() => {
+  // Draw overlay directly (no React state involved)
+  const drawOverlay = useCallback(() => {
     const canvas = overlayRef.current;
     if (!canvas) return;
 
-    canvas.width = canvasWidth;
-    canvas.height = canvasHeight;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const coords = toCanvasCoords(cropBox);
+    const cb = cropBoxRef.current;
+    const coords = toCanvasCoords(cb);
+
+    // Clear canvas
+    ctx.clearRect(0, 0, canvasWidth, canvasHeight);
 
     // Draw dark overlay outside crop region
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
@@ -66,84 +70,164 @@ export function CropOverlay({
     ctx.setLineDash([]);
     ctx.fillStyle = '#3b82f6';
     const handleSize = 10;
-    // Top-left
     ctx.fillRect(coords.left - handleSize/2, coords.top - handleSize/2, handleSize, handleSize);
-    // Top-right
     ctx.fillRect(coords.right - handleSize/2, coords.top - handleSize/2, handleSize, handleSize);
-    // Bottom-left
     ctx.fillRect(coords.left - handleSize/2, coords.bottom - handleSize/2, handleSize, handleSize);
-    // Bottom-right
     ctx.fillRect(coords.right - handleSize/2, coords.bottom - handleSize/2, handleSize, handleSize);
-  }, [cropBox, canvasWidth, canvasHeight, toCanvasCoords]);
+  }, [canvasWidth, canvasHeight, toCanvasCoords]);
+
+  // Update UI elements (corner handles and info)
+  const updateUI = useCallback(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const cb = cropBoxRef.current;
+    const coords = toCanvasCoords(cb);
+
+    // Update interactive region position
+    const moveRegion = container.querySelector('[data-region="move"]') as HTMLDivElement;
+    if (moveRegion) {
+      moveRegion.style.left = `${coords.left}px`;
+      moveRegion.style.top = `${coords.top}px`;
+      moveRegion.style.width = `${coords.right - coords.left}px`;
+      moveRegion.style.height = `${coords.bottom - coords.top}px`;
+    }
+
+    // Update corner handle positions
+    const handles = container.querySelectorAll('[data-handle]');
+    handles.forEach((handle) => {
+      const corner = handle.getAttribute('data-handle');
+      const el = handle as HTMLDivElement;
+      switch (corner) {
+        case 'tl':
+          el.style.left = `${coords.left - 6}px`;
+          el.style.top = `${coords.top - 6}px`;
+          break;
+        case 'tr':
+          el.style.left = `${coords.right - 6}px`;
+          el.style.top = `${coords.top - 6}px`;
+          break;
+        case 'bl':
+          el.style.left = `${coords.left - 6}px`;
+          el.style.top = `${coords.bottom - 6}px`;
+          break;
+        case 'br':
+          el.style.left = `${coords.right - 6}px`;
+          el.style.top = `${coords.bottom - 6}px`;
+          break;
+      }
+    });
+
+    // Update info display
+    const infoEl = container.querySelector('[data-info]') as HTMLDivElement;
+    if (infoEl) {
+      infoEl.textContent = `(x=${cb.x1.toFixed(0)}%, y=${cb.y1.toFixed(0)}%) - (x=${cb.x2.toFixed(0)}%, y=${cb.y2.toFixed(0)}%)`;
+    }
+  }, [toCanvasCoords]);
+
+  // Schedule a frame update
+  const scheduleUpdate = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+    }
+    rafRef.current = requestAnimationFrame(() => {
+      drawOverlay();
+      updateUI();
+    });
+  }, [drawOverlay, updateUI]);
+
+  // Initial draw
+  useEffect(() => {
+    const canvas = overlayRef.current;
+    if (canvas) {
+      canvas.width = canvasWidth;
+      canvas.height = canvasHeight;
+    }
+    scheduleUpdate();
+
+    return () => {
+      if (rafRef.current) {
+        cancelAnimationFrame(rafRef.current);
+      }
+    };
+  }, [canvasWidth, canvasHeight, scheduleUpdate]);
 
   const handleMouseDown = (e: React.MouseEvent, corner: 'tl' | 'tr' | 'bl' | 'br' | 'move') => {
     e.stopPropagation();
-    setDragging(corner);
-    setDragStart({ x: e.clientX, y: e.clientY });
+    draggingRef.current = corner;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!dragging) return;
+    if (!draggingRef.current) return;
 
-    const dx = ((e.clientX - dragStart.x) / canvasWidth) * 100;
-    const dy = ((e.clientY - dragStart.y) / canvasHeight) * 100;
+    const dx = ((e.clientX - dragStartRef.current.x) / canvasWidth) * 100;
+    const dy = ((e.clientY - dragStartRef.current.y) / canvasHeight) * 100;
 
-    setCropBox(prev => {
-      const newBox = { ...prev };
+    const prev = cropBoxRef.current;
+    const newBox = { ...prev };
 
-      // Note: canvas y increases downward, but cropBox y increases upward
-      if (dragging === 'tl') {
-        newBox.x1 = Math.max(0, Math.min(prev.x1 + dx, prev.x2 - config.crop.minCropSize * 100));
-        newBox.y2 = Math.max(prev.y1 + config.crop.minCropSize * 100, Math.min(100, prev.y2 - dy));
-      } else if (dragging === 'tr') {
-        newBox.x2 = Math.max(prev.x1 + config.crop.minCropSize * 100, Math.min(100, prev.x2 + dx));
-        newBox.y2 = Math.max(prev.y1 + config.crop.minCropSize * 100, Math.min(100, prev.y2 - dy));
-      } else if (dragging === 'bl') {
-        newBox.x1 = Math.max(0, Math.min(prev.x1 + dx, prev.x2 - config.crop.minCropSize * 100));
-        newBox.y1 = Math.max(0, Math.min(prev.y1 - dy, prev.y2 - config.crop.minCropSize * 100));
-      } else if (dragging === 'br') {
-        newBox.x2 = Math.max(prev.x1 + config.crop.minCropSize * 100, Math.min(100, prev.x2 + dx));
-        newBox.y1 = Math.max(0, Math.min(prev.y1 - dy, prev.y2 - config.crop.minCropSize * 100));
-      } else if (dragging === 'move') {
-        const width = prev.x2 - prev.x1;
-        const height = prev.y2 - prev.y1;
-        let newX1 = prev.x1 + dx;
-        let newY1 = prev.y1 - dy;
+    const dragging = draggingRef.current;
 
-        // Keep within bounds
-        if (newX1 < 0) newX1 = 0;
-        if (newX1 + width > 100) newX1 = 100 - width;
-        if (newY1 < 0) newY1 = 0;
-        if (newY1 + height > 100) newY1 = 100 - height;
+    // Note: canvas y increases downward, but cropBox y increases upward
+    if (dragging === 'tl') {
+      newBox.x1 = Math.max(0, Math.min(prev.x1 + dx, prev.x2 - config.crop.minCropSize * 100));
+      newBox.y2 = Math.max(prev.y1 + config.crop.minCropSize * 100, Math.min(100, prev.y2 - dy));
+    } else if (dragging === 'tr') {
+      newBox.x2 = Math.max(prev.x1 + config.crop.minCropSize * 100, Math.min(100, prev.x2 + dx));
+      newBox.y2 = Math.max(prev.y1 + config.crop.minCropSize * 100, Math.min(100, prev.y2 - dy));
+    } else if (dragging === 'bl') {
+      newBox.x1 = Math.max(0, Math.min(prev.x1 + dx, prev.x2 - config.crop.minCropSize * 100));
+      newBox.y1 = Math.max(0, Math.min(prev.y1 - dy, prev.y2 - config.crop.minCropSize * 100));
+    } else if (dragging === 'br') {
+      newBox.x2 = Math.max(prev.x1 + config.crop.minCropSize * 100, Math.min(100, prev.x2 + dx));
+      newBox.y1 = Math.max(0, Math.min(prev.y1 - dy, prev.y2 - config.crop.minCropSize * 100));
+    } else if (dragging === 'move') {
+      const width = prev.x2 - prev.x1;
+      const height = prev.y2 - prev.y1;
+      let newX1 = prev.x1 + dx;
+      let newY1 = prev.y1 - dy;
 
-        newBox.x1 = newX1;
-        newBox.y1 = newY1;
-        newBox.x2 = newX1 + width;
-        newBox.y2 = newY1 + height;
-      }
+      // Keep within bounds
+      if (newX1 < 0) newX1 = 0;
+      if (newX1 + width > 100) newX1 = 100 - width;
+      if (newY1 < 0) newY1 = 0;
+      if (newY1 + height > 100) newY1 = 100 - height;
 
-      return newBox;
-    });
+      newBox.x1 = newX1;
+      newBox.y1 = newY1;
+      newBox.x2 = newX1 + width;
+      newBox.y2 = newY1 + height;
+    }
 
-    setDragStart({ x: e.clientX, y: e.clientY });
+    cropBoxRef.current = newBox;
+    dragStartRef.current = { x: e.clientX, y: e.clientY };
+
+    // Directly update without React state
+    scheduleUpdate();
   };
 
   const handleMouseUp = () => {
-    setDragging(null);
+    draggingRef.current = null;
   };
 
   const handleAutoCrop = async () => {
     if (!sourceCanvas) return;
     const newCropBox = await detectAutoCrop(sourceCanvas);
     if (newCropBox) {
-      setCropBox(newCropBox);
+      cropBoxRef.current = newCropBox;
+      scheduleUpdate();
     }
   };
 
-  const coords = toCanvasCoords(cropBox);
+  const handleConfirm = () => {
+    onConfirm(cropBoxRef.current);
+  };
+
+  const coords = toCanvasCoords(cropBoxRef.current);
 
   return (
-    <div className="absolute inset-0 z-20">
+    <div ref={containerRef} className="absolute inset-0 z-20">
       <canvas
         ref={overlayRef}
         className="absolute inset-0 cursor-crosshair"
@@ -152,8 +236,9 @@ export function CropOverlay({
         onMouseLeave={handleMouseUp}
       />
 
-      {/* Interactive regions */}
+      {/* Interactive move region */}
       <div
+        data-region="move"
         className="absolute"
         style={{
           left: coords.left,
@@ -166,24 +251,38 @@ export function CropOverlay({
       />
 
       {/* Corner handles */}
-      {[
-        { corner: 'tl' as const, left: coords.left, top: coords.top, cursor: 'nwse-resize' },
-        { corner: 'tr' as const, left: coords.right, top: coords.top, cursor: 'nesw-resize' },
-        { corner: 'bl' as const, left: coords.left, top: coords.bottom, cursor: 'nesw-resize' },
-        { corner: 'br' as const, left: coords.right, top: coords.bottom, cursor: 'nwse-resize' },
-      ].map(({ corner, left, top, cursor }) => (
-        <div
-          key={corner}
-          className="absolute w-3 h-3 bg-blue-500 border-2 border-white rounded-sm"
-          style={{ left: left - 6, top: top - 6, cursor }}
-          onMouseDown={(e) => handleMouseDown(e, corner)}
-        />
-      ))}
+      <div
+        data-handle="tl"
+        className="absolute w-3 h-3 bg-blue-500 border-2 border-white rounded-sm"
+        style={{ left: coords.left - 6, top: coords.top - 6, cursor: 'nwse-resize' }}
+        onMouseDown={(e) => handleMouseDown(e, 'tl')}
+      />
+      <div
+        data-handle="tr"
+        className="absolute w-3 h-3 bg-blue-500 border-2 border-white rounded-sm"
+        style={{ left: coords.right - 6, top: coords.top - 6, cursor: 'nesw-resize' }}
+        onMouseDown={(e) => handleMouseDown(e, 'tr')}
+      />
+      <div
+        data-handle="bl"
+        className="absolute w-3 h-3 bg-blue-500 border-2 border-white rounded-sm"
+        style={{ left: coords.left - 6, top: coords.bottom - 6, cursor: 'nesw-resize' }}
+        onMouseDown={(e) => handleMouseDown(e, 'bl')}
+      />
+      <div
+        data-handle="br"
+        className="absolute w-3 h-3 bg-blue-500 border-2 border-white rounded-sm"
+        style={{ left: coords.right - 6, top: coords.bottom - 6, cursor: 'nwse-resize' }}
+        onMouseDown={(e) => handleMouseDown(e, 'br')}
+      />
 
       {/* Info bar */}
       <div className="absolute bottom-full left-0 right-0 mb-2 flex justify-center gap-2">
-        <div className="bg-black/70 text-white text-xs px-3 py-1 rounded">
-          (x={cropBox.x1.toFixed(0)}%, y={cropBox.y1.toFixed(0)}%) - (x={cropBox.x2.toFixed(0)}%, y={cropBox.y2.toFixed(0)}%)
+        <div
+          data-info
+          className="bg-black/70 text-white text-xs px-3 py-1 rounded"
+        >
+          (x={cropBoxRef.current.x1.toFixed(0)}%, y={cropBoxRef.current.y1.toFixed(0)}%) - (x={cropBoxRef.current.x2.toFixed(0)}%, y={cropBoxRef.current.y2.toFixed(0)}%)
         </div>
       </div>
 
@@ -196,7 +295,7 @@ export function CropOverlay({
           Auto
         </button>
         <button
-          onClick={() => onConfirm(cropBox)}
+          onClick={handleConfirm}
           className="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
         >
           Confirm
