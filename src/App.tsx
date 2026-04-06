@@ -1,6 +1,7 @@
 import { useRef, useState, useCallback, useEffect } from 'react';
 import { Toolbar } from './components/Toolbar';
-import { PDFViewer, PDFViewerRef } from './components/PDFViewer';
+import { PDFViewer } from './components/PDFViewer';
+import type { PDFViewerRef } from './components/PDFViewer';
 import { Sidebar } from './components/Sidebar/Sidebar';
 import { CropOverlay } from './components/CropOverlay';
 import { ExportDialog } from './components/ExportDialog';
@@ -46,16 +47,21 @@ function App() {
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 0, height: 0 });
+  const [sourceCanvas, setSourceCanvas] = useState<HTMLCanvasElement | null>(null);
 
   // Track undo/redo availability using internal state counters
   // Note: useEditorState doesn't expose canUndo/canRedo, so we track changes
   const [changeCount, setChangeCount] = useState(0);
   const [undoCount, setUndoCount] = useState(0);
+  const prevHasUnappliedChangesRef = useRef(hasUnappliedChanges);
 
   const handleLoadFile = async (file: File) => {
     const bytes = await file.arrayBuffer();
     setPdfBytes(bytes);
     resetState();
+    // Reset counters when loading a new file
+    setChangeCount(0);
+    setUndoCount(0);
     await loadFromFile(file);
   };
 
@@ -64,16 +70,16 @@ function App() {
     if (pdfDocument && pdfDocument.numPages > 0 && pages.length === 0) {
       const name = fileName || 'document';
       initPages(pdfDocument.numPages, name);
-      setChangeCount(0);
-      setUndoCount(0);
     }
   }, [pdfDocument, pages.length, fileName, initPages]);
 
-  // Track canvas dimensions for CropOverlay
+  // Track canvas dimensions and source canvas for CropOverlay
   useEffect(() => {
     if (mode === 'crop' && pdfViewerRef.current) {
-      const size = pdfViewerRef.current.getCanvasSize();
+      // In crop mode, we need the FULL page size for the overlay
+      const size = pdfViewerRef.current.getFullPageSize();
       setCanvasDimensions(size);
+      setSourceCanvas(pdfViewerRef.current.getCanvas());
     }
   }, [mode, currentPageState]);
 
@@ -93,7 +99,10 @@ function App() {
   const handleExportImage = async (outputFileName: string, format: 'png' | 'jpg', resolution: number) => {
     const canvas = pdfViewerRef.current?.getCanvas();
     if (!canvas || !currentPageState) return;
-    await exportImage(canvas, currentPageState.cropBox, format, resolution, outputFileName);
+    // If cropBox exists and we're not in crop mode, the canvas is already cropped
+    // So we pass null for cropBox to avoid double-cropping
+    const effectiveCropBox = (currentPageState.cropBox && mode !== 'crop') ? null : currentPageState.cropBox;
+    await exportImage(canvas, effectiveCropBox, format, resolution, outputFileName);
   };
 
   // Wrapped undo/redo with tracking
@@ -107,12 +116,17 @@ function App() {
     setUndoCount(prev => prev - 1);
   }, [redo]);
 
-  // Track when changes are made
+  // Track when changes are made using a ref to detect transitions
+  // This pattern is intentional: we only increment when hasUnappliedChanges transitions from false to true
   useEffect(() => {
-    if (hasUnappliedChanges) {
-      setChangeCount(prev => prev + 1);
+    if (prevHasUnappliedChangesRef.current !== hasUnappliedChanges) {
+      prevHasUnappliedChangesRef.current = hasUnappliedChanges;
+      if (hasUnappliedChanges) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setChangeCount(prev => prev + 1);
+      }
     }
-  }, [hasUnappliedChanges]);
+  }, [hasUnappliedChanges]); // Only run when hasUnappliedChanges changes
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -208,7 +222,7 @@ function App() {
               initialCropBox={currentPageState.cropBox}
               onConfirm={handleConfirmCrop}
               onCancel={exitCropMode}
-              sourceCanvas={pdfViewerRef.current?.getCanvas() ?? null}
+              sourceCanvas={sourceCanvas}
             />
           )}
         </PDFViewer>

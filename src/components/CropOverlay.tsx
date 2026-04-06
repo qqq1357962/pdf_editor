@@ -89,7 +89,7 @@ export function CropOverlay({
     const dy = ((e.clientY - dragStart.y) / canvasHeight) * 100;
 
     setCropBox(prev => {
-      let newBox = { ...prev };
+      const newBox = { ...prev };
 
       // Note: canvas y increases downward, but cropBox y increases upward
       if (dragging === 'tl') {

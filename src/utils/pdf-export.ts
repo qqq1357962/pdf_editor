@@ -43,7 +43,7 @@ export async function exportPDF(
   }
 
   const pdfBytes = await destDoc.save();
-  const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+  const blob = new Blob([new Uint8Array(pdfBytes).buffer], { type: 'application/pdf' });
 
   // Download
   const url = URL.createObjectURL(blob);

@@ -36,19 +36,48 @@ export function Thumbnail({
         // Calculate thumbnail size
         const viewport = page.getViewport({ scale: 1 });
         const scale = config.thumbnail.width / viewport.width;
-        const scaledViewport = page.getViewport({ scale });
 
         // Apply rotation
         const rotation = pageState.rotation;
         const finalViewport = page.getViewport({ scale, rotation });
 
-        canvas.width = finalViewport.width;
-        canvas.height = finalViewport.height;
+        // Apply crop if cropBox exists
+        const cropBox = pageState.cropBox;
+        if (cropBox) {
+          // Render to temp canvas first, then crop
+          const tempCanvas = document.createElement('canvas');
+          tempCanvas.width = finalViewport.width;
+          tempCanvas.height = finalViewport.height;
+          const tempCtx = tempCanvas.getContext('2d')!;
 
-        await page.render({
-          canvasContext: ctx,
-          viewport: finalViewport,
-        }).promise;
+          await page.render({
+            canvasContext: tempCtx,
+            viewport: finalViewport,
+          }).promise;
+
+          // Calculate crop dimensions
+          const cropX = (cropBox.x1 / 100) * finalViewport.width;
+          const cropY = (1 - cropBox.y2 / 100) * finalViewport.height;
+          const cropWidth = ((cropBox.x2 - cropBox.x1) / 100) * finalViewport.width;
+          const cropHeight = ((cropBox.y2 - cropBox.y1) / 100) * finalViewport.height;
+
+          canvas.width = cropWidth;
+          canvas.height = cropHeight;
+
+          ctx.drawImage(
+            tempCanvas,
+            cropX, cropY, cropWidth, cropHeight,
+            0, 0, cropWidth, cropHeight
+          );
+        } else {
+          canvas.width = finalViewport.width;
+          canvas.height = finalViewport.height;
+
+          await page.render({
+            canvasContext: ctx,
+            viewport: finalViewport,
+          }).promise;
+        }
 
         if (!cancelled) {
           setLoaded(true);
@@ -63,7 +92,7 @@ export function Thumbnail({
     return () => {
       cancelled = true;
     };
-  }, [pdfDocument, pageState.sourcePageIndex, pageState.rotation, pageState.deleted]);
+  }, [pdfDocument, pageState.sourcePageIndex, pageState.rotation, pageState.deleted, pageState.cropBox]);
 
   if (pageState.deleted) {
     return (
