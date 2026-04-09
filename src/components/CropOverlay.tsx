@@ -79,6 +79,38 @@ export function CropOverlay({
     if (infoEl) {
       infoEl.textContent = `(x=${cb.x1.toFixed(0)}%, y=${cb.y1.toFixed(0)}%) → (x=${cb.x2.toFixed(0)}%, y=${cb.y2.toFixed(0)}%)`;
     }
+
+    // Update corner handle positions
+    const handles = containerRef.current?.querySelectorAll('[data-handle]');
+    if (handles) {
+      const handleOffset = 8;
+      handles.forEach((handle) => {
+        const el = handle as HTMLDivElement;
+        const corner = el.dataset.handle;
+        if (corner === 'tl') {
+          el.style.left = `${coords.left - handleOffset}px`;
+          el.style.top = `${coords.top - handleOffset}px`;
+        } else if (corner === 'tr') {
+          el.style.left = `${coords.right - handleOffset}px`;
+          el.style.top = `${coords.top - handleOffset}px`;
+        } else if (corner === 'bl') {
+          el.style.left = `${coords.left - handleOffset}px`;
+          el.style.top = `${coords.bottom - handleOffset}px`;
+        } else if (corner === 'br') {
+          el.style.left = `${coords.right - handleOffset}px`;
+          el.style.top = `${coords.bottom - handleOffset}px`;
+        }
+      });
+    }
+
+    // Update move region position
+    const moveRegion = containerRef.current?.querySelector('[data-move-region]') as HTMLDivElement;
+    if (moveRegion) {
+      moveRegion.style.left = `${coords.left}px`;
+      moveRegion.style.top = `${coords.top}px`;
+      moveRegion.style.width = `${coords.right - coords.left}px`;
+      moveRegion.style.height = `${coords.bottom - coords.top}px`;
+    }
   }, [canvasWidth, canvasHeight, toCanvasCoords]);
 
   // Handle drag
@@ -176,6 +208,7 @@ export function CropOverlay({
 
   const handleAutoCrop = async () => {
     if (!sourceCanvas) return;
+
     const newCropBox = await detectAutoCrop(sourceCanvas);
     if (newCropBox) {
       cropBoxRef.current = newCropBox;
@@ -203,6 +236,7 @@ export function CropOverlay({
 
       {/* Interactive move region - transparent, catches events */}
       <div
+        data-move-region
         className="absolute"
         style={{
           left: coords.left,
@@ -216,21 +250,25 @@ export function CropOverlay({
 
       {/* Corner handles */}
       <div
+        data-handle="tl"
         className="absolute w-4 h-4 bg-blue-500 border-2 border-white rounded cursor-nwse-resize hover:bg-blue-400"
         style={{ left: coords.left - 8, top: coords.top - 8 }}
         onMouseDown={(e) => startDrag(e, 'tl')}
       />
       <div
+        data-handle="tr"
         className="absolute w-4 h-4 bg-blue-500 border-2 border-white rounded cursor-nesw-resize hover:bg-blue-400"
         style={{ left: coords.right - 8, top: coords.top - 8 }}
         onMouseDown={(e) => startDrag(e, 'tr')}
       />
       <div
+        data-handle="bl"
         className="absolute w-4 h-4 bg-blue-500 border-2 border-white rounded cursor-nesw-resize hover:bg-blue-400"
         style={{ left: coords.left - 8, top: coords.bottom - 8 }}
         onMouseDown={(e) => startDrag(e, 'bl')}
       />
       <div
+        data-handle="br"
         className="absolute w-4 h-4 bg-blue-500 border-2 border-white rounded cursor-nwse-resize hover:bg-blue-400"
         style={{ left: coords.right - 8, top: coords.bottom - 8 }}
         onMouseDown={(e) => startDrag(e, 'br')}

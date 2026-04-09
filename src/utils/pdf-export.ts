@@ -23,13 +23,13 @@ export async function exportPDF(
     // Apply crop
     if (pageState.cropBox) {
       const { width, height } = copiedPage.getSize();
-      // Convert percentages to points
+      // Convert percentages (0-100) to points
       // cropBox uses left-bottom origin (x-right, y-up)
       // pdf-lib uses left-bottom origin too
-      const cropLeft = width * pageState.cropBox.x1;
-      const cropBottom = height * pageState.cropBox.y1;
-      const cropRight = width * pageState.cropBox.x2;
-      const cropTop = height * pageState.cropBox.y2;
+      const cropLeft = width * (pageState.cropBox.x1 / 100);
+      const cropBottom = height * (pageState.cropBox.y1 / 100);
+      const cropRight = width * (pageState.cropBox.x2 / 100);
+      const cropTop = height * (pageState.cropBox.y2 / 100);
 
       copiedPage.setCropBox(
         cropLeft,

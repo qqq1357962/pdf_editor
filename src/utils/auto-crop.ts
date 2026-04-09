@@ -65,22 +65,22 @@ export async function detectAutoCrop(
   const pageWidth = width;
   const pageHeight = height;
 
-  // Convert to percentages with left-bottom origin
+  // Convert to percentages (0-100 range) with left-bottom origin
   // Canvas has top-left origin, so we need to flip y
-  const x1 = Math.max(0, bounds.left / pageWidth - margin);
-  const x2 = Math.min(1, bounds.right / pageWidth + margin);
-  const y1 = Math.max(0, (pageHeight - bounds.bottom) / pageHeight - margin);
-  const y2 = Math.min(1, (pageHeight - bounds.top) / pageHeight + margin);
+  const x1Percent = Math.max(0, bounds.left / pageWidth - margin) * 100;
+  const x2Percent = Math.min(1, bounds.right / pageWidth + margin) * 100;
+  const y1Percent = Math.max(0, (pageHeight - bounds.bottom) / pageHeight - margin) * 100;
+  const y2Percent = Math.min(1, (pageHeight - bounds.top) / pageHeight + margin) * 100;
 
   // Ensure minimum size
-  if (x2 - x1 < config.crop.minCropSize || y2 - y1 < config.crop.minCropSize) {
+  if ((x2Percent - x1Percent) / 100 < config.crop.minCropSize || (y2Percent - y1Percent) / 100 < config.crop.minCropSize) {
     return null;
   }
 
   return {
-    x1: Math.round(x1 * 100) / 100,
-    y1: Math.round(y1 * 100) / 100,
-    x2: Math.round(x2 * 100) / 100,
-    y2: Math.round(y2 * 100) / 100,
+    x1: Math.round(x1Percent),
+    y1: Math.round(y1Percent),
+    x2: Math.round(x2Percent),
+    y2: Math.round(y2Percent),
   };
 }
