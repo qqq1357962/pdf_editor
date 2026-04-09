@@ -43,6 +43,9 @@ function App() {
     resetState,
   } = useEditorState();
 
+  const currentPage = pages[selectedIndex];
+  const isCurrentPageDeleted = currentPage?.deleted ?? false;
+
   const pdfViewerRef = useRef<PDFViewerRef>(null);
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [pdfBytes, setPdfBytes] = useState<ArrayBuffer | null>(null);
@@ -188,6 +191,11 @@ function App() {
         onRedo={handleRedo}
         canUndo={canUndo}
         canRedo={canRedo}
+        onCrop={enterCropMode}
+        onRotate={() => rotatePage(selectedIndex)}
+        onDelete={() => deletePage(selectedIndex)}
+        mode={mode}
+        isCurrentPageDeleted={isCurrentPageDeleted}
       />
 
       {error && (
@@ -202,10 +210,6 @@ function App() {
           pages={pages}
           selectedIndex={selectedIndex}
           onSelectPage={selectPage}
-          onDeletePage={deletePage}
-          onRotatePage={rotatePage}
-          onEnterCropMode={enterCropMode}
-          mode={mode}
         />
 
         <PDFViewer

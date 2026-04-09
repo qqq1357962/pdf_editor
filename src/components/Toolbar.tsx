@@ -11,6 +11,12 @@ interface ToolbarProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  // Page action buttons
+  onCrop: () => void;
+  onRotate: () => void;
+  onDelete: () => void;
+  mode: 'view' | 'crop';
+  isCurrentPageDeleted: boolean;
 }
 
 export function Toolbar({
@@ -24,6 +30,11 @@ export function Toolbar({
   onRedo,
   canUndo,
   canRedo,
+  onCrop,
+  onRotate,
+  onDelete,
+  mode,
+  isCurrentPageDeleted,
 }: ToolbarProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -111,6 +122,43 @@ export function Toolbar({
           >
             Export
           </button>
+        </>
+      )}
+
+      {/* Page action buttons */}
+      {fileName && (
+        <>
+          <div className="w-px h-8 bg-gray-600" />
+          <div className="flex items-center gap-1">
+            <button
+              onClick={onCrop}
+              disabled={mode === 'crop' || isCurrentPageDeleted}
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Crop current page"
+            >
+              Crop
+            </button>
+            <button
+              onClick={onRotate}
+              disabled={isCurrentPageDeleted}
+              className="px-3 py-2 bg-gray-600 hover:bg-gray-700 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              title="Rotate current page"
+            >
+              Rotate
+            </button>
+            <button
+              onClick={onDelete}
+              disabled={mode === 'crop'}
+              className={`px-3 py-2 rounded disabled:opacity-50 disabled:cursor-not-allowed text-sm ${
+                isCurrentPageDeleted
+                  ? 'bg-green-600 hover:bg-green-700'
+                  : 'bg-red-600 hover:bg-red-700'
+              }`}
+              title={isCurrentPageDeleted ? 'Restore current page' : 'Delete current page'}
+            >
+              {isCurrentPageDeleted ? 'Restore' : 'Delete'}
+            </button>
+          </div>
         </>
       )}
 

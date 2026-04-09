@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, forwardRef, useImperativeHandle } from 'react';
-import type { PDFDocumentProxy, PDFPageProxy, PageState, CropBox } from '../types/pdf';
+import type { PDFDocumentProxy, PDFPageProxy, PageState } from '../types/pdf';
 
 interface PDFViewerProps {
   pdfDocument: PDFDocumentProxy | null;
